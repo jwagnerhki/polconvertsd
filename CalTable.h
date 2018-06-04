@@ -31,15 +31,16 @@ class CalTable {
   public:
      CalTable(int kind, double **R1,double **I1,double **R2,double **I2, double *freqs, double **times, int Na, long *Nt, long Nc, bool **flag, bool islinear, FILE *logF);
      ~CalTable();
-     int getNant();
-     long getNchan();
-     bool isBandpass();
-     void getTimeRange(double *JD);
-     void getFreqRange(double *Fr);
-     long getNEntries(int ant);
-     void getFrequencies(double *freqs);
-     void getTimes(int ant, double *times);
-     void getGains(int ant, long timeidx, double *gain[4]);
+     int getNant() const;
+     long getNchan() const;
+     bool isBandpass() const;
+     void getTimeRange(double *JD) const;
+     void getFreqRange(double *Fr) const;
+     long getNEntries(int ant) const;
+     void getFrequencies(double *freqs) const;
+     void getTimes(int ant, double *times) const;
+     void getGains(int ant, long timeidx, double *gain[4]) const;
+     bool getChanged() const;
      void setChanged(bool ch);
 
 /* Prepares the instance for the frequency interpolation. User must provide
@@ -74,7 +75,9 @@ class CalTable {
 
      FILE *logFile;
      char message[512];
-     void fillGaps();  // Fills flagged gains with interpolated values.
+     void interpolateFlaggedData();  // Fills flagged gains with interpolated values.
+     void interpolateFlaggedData_Time(const int ant);
+     void interpolateFlaggedData_Channel(const int ant);
      static const int Nmax = 256; // Maximum number of antennas.
      std::string name;
      long *Ntimes;
@@ -82,7 +85,7 @@ class CalTable {
      bool SignFreq, success;
      double ***GainAmp[2];
      double ***GainPhase[2];
-     bool **flags, *firstTime;
+     bool **Flags, *firstTime;
      double *BuffPhase[2];
      double *BuffAmp[2];
      double **Time;
@@ -92,9 +95,9 @@ class CalTable {
      double *K0;
      long *I0;
      long *I1;
-     long MSChan;
      double *preKt;
      long *pret0, *pret1;
+     long MSChan;
 
      bool isDelay, gainChanged, isDterm, isTsys;
      const bool isLinear;
