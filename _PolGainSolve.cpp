@@ -357,7 +357,7 @@ for(i=0;i<NIF;i++){
   free(Ant1[i]);free(Ant2[i]);free(Scan[i]);free(Times[i]);
   free(PA1[i]);free(PA2[i]);free(RR[i]);free(RL[i]);
   free(LR[i]);free(LL[i]);
-  delete Frequencies[i];
+  delete[] Frequencies[i];
 };
 
 if(NIF>0){
