@@ -69,14 +69,16 @@ class CalTable {
 
   private:
 
+     const int Nants;
+     const long Nchan;
+
      FILE *logFile;
      char message[512];
      void fillGaps();  // Fills flagged gains with interpolated values.
      static const int Nmax = 256; // Maximum number of antennas.
      std::string name;
-     int Nants;
      long *Ntimes;
-     long Nchan;
+
      bool SignFreq, success;
      double ***GainAmp[2];
      double ***GainPhase[2];
@@ -88,12 +90,15 @@ class CalTable {
      double *Freqs;
      double JDRange[2];
      double *K0;
-     long *I0; 
-     long *I1; 
+     long *I0;
+     long *I1;
      long MSChan;
      double *preKt;
      long *pret0, *pret1;
-     bool isDelay, gainChanged, isLinear, isDterm, isTsys;
+
+     bool isDelay, gainChanged, isDterm, isTsys;
+     const bool isLinear;
+
      double deltaNu0, deltaNu;
      std::complex<float>** bufferGain[2];
 };

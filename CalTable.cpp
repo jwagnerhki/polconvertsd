@@ -3,119 +3,101 @@
              Copyright (C) 2013  Ivan Marti-Vidal
              Nordic Node of EU ALMA Regional Center (Onsala, Sweden)
              Max-Planck-Institut fuer Radioastronomie (Bonn, Germany)
-  
+
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
-  
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
-  
-You should have received a copy of the GNU General Public License   
+
+You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>
-  
 */
 
+// Refactoring 6/2018 JanW
 
 #include <sys/types.h>
 #include <math.h>
-#include <iostream>  
+#include <iostream>
 #include <fstream>
 #include <cstring>
 #include "CalTable.h"
-#define PI 3.141592653589793
+#define PI 3.141592653589793  // todo: math.h M_PI, M_2PI ?
 #define TWOPI 6.283185307179586
 #include <complex>
 
-CalTable::~CalTable() {};
-
-
-CalTable::CalTable(int kind, double **R1,double **P1,double **R2,double **P2, double *freqs, double **times, int Na, long *Nt, long Nc, bool **flag, bool islinear, FILE *logF)
+CalTable::~CalTable()
 {
+    // TODO: delete all the allocated stuff!
+}
 
+CalTable::CalTable(int kind,
+    double **R1, double **P1, double **R2, double **P2,
+    double *freqs, double **times,
+    int Na, long *Nt, long Nc, bool **flag, bool islinear,
+    FILE *logF) : Nants(Na), Nchan(Nc), isLinear(islinear)
+{
+    // Initiate variables and declare auxiliary variables:
+    logFile = logF ;
 
+    firstTime = new bool[Nants];
 
-// Initiate variables and declare auxiliary variables:
+    isDelay = (kind==1); // ToDO: enum! CalTableKind { Delay, DTerm, Tsys, ... }
+    isDterm = (kind==2);
+    isTsys = (kind==3);
+    gainChanged = true;
 
-      Nchan = Nc;
-      Nants = Na;
+    Ntimes = new long[Nants];
+    std::memcpy(Ntimes,Nt,sizeof(long)*Nants);
 
-      logFile = logF ;
+    Freqs = new double[Nchan];
+    std::memcpy(Freqs,freqs,sizeof(double)*Nchan);
+    SignFreq = (Freqs[1]>Freqs[0]);
 
-      isLinear = islinear;      
-//      isTsys = istsys;
-
-      firstTime = new bool[Nants];
-
-      isDelay = kind==1;
-      isDterm = kind==2;
-      isTsys = kind==3;
-      gainChanged = true;
-
-      Ntimes = new long[Nants];
-      std::memcpy(Ntimes,Nt,sizeof(long)*Nants);
-
-      Time = new double*[Nants];
-      flags = new bool*[Nants];
-
-      int ia;
-      for (ia=0; ia<Nants; ia++){
+    Time = new double*[Nants];
+    for (int ia=0; ia<Nants; ia++) {
         firstTime[ia] = true;
         Time[ia] = new double[Ntimes[ia]];
-        flags[ia] = new bool[Ntimes[ia]*Nchan];
         std::memcpy(Time[ia],times[ia],sizeof(double)*Ntimes[ia]);
+    }
+
+    flags = new bool*[Nants];
+    for (int ia=0; ia<Nants; ia++) {
+        flags[ia] = new bool[Ntimes[ia]*Nchan];
         std::memcpy(flags[ia],flag[ia],sizeof(bool)*Ntimes[ia]*Nchan);
-      };
+    }
 
-      Freqs = new double[Nchan];
-      std::memcpy(Freqs,freqs,sizeof(double)*Nchan);
+    JDRange[1] = 0.0;
+    JDRange[0] = 1.e20;
+    for (int pol=0; pol<=1; pol++) {
+        GainAmp[pol] = new double**[Nants];
+        GainPhase[pol] = new double**[Nants];
+        for (long i=0; i<Nants; i++) {
+            // Time range (min T, max T)
+            if (Time[i][0]<JDRange[0]) { JDRange[0] = Time[i][0]; }
+            if (Time[i][Ntimes[i]-1]>JDRange[1]) { JDRange[1] = Time[i][Ntimes[i]-1]; }
+            GainAmp[pol][i] = new double*[Nchan];
+            GainPhase[pol][i] = new double*[Nchan];
+            for (long j=0; j<Nchan; j++) {
+                GainAmp[pol][i][j] = new double[Ntimes[i]];
+                GainPhase[pol][i][j] = new double[Ntimes[i]];
+                for (long k=0; k<Ntimes[i]; k++){
+                    long auxI = j*Ntimes[i]+k;
+                    GainAmp[pol][i][j][k] = R1[i][auxI];
+                    GainPhase[pol][i][j][k] = P1[i][auxI];
+                }
+            }
+        }
+    }
 
+    // Interpolate across any data gaps
+    fillGaps();
 
-
-
-      long i, j, k, auxI; //, auxI2, auxI3;
-      JDRange[1] = 0.0;
-      JDRange[0] = 1.e20;
-    //  double auxD;
-      GainAmp[0] = new double**[Nants];
-      GainAmp[1] = new double**[Nants];
-      GainPhase[0] = new double**[Nants];
-      GainPhase[1] = new double**[Nants];
-   //   flags = flag;
-      for (i=0; i<Nants; i++){
-        if (Time[i][0]<JDRange[0]){JDRange[0] = Time[i][0];};
-        if (Time[i][Ntimes[i]-1]>JDRange[1]){JDRange[1] = Time[i][Ntimes[i]-1];};
-        GainAmp[0][i] = new double*[Nchan];
-        GainAmp[1][i] = new double*[Nchan];
-        GainPhase[0][i] = new double*[Nchan];
-        GainPhase[1][i] = new double*[Nchan];
-        for (j=0; j<Nchan; j++) {
-          GainAmp[0][i][j] = new double[Ntimes[i]];
-          GainAmp[1][i][j] = new double[Ntimes[i]];
-          GainPhase[0][i][j] = new double[Ntimes[i]];
-          GainPhase[1][i][j] = new double[Ntimes[i]];
-          for (k=0; k<Ntimes[i]; k++){
-            auxI = j*Ntimes[i]+k; 
-            GainAmp[0][i][j][k] = R1[i][auxI];
-            GainAmp[1][i][j][k] = R2[i][auxI];
-            GainPhase[0][i][j][k] = P1[i][auxI];
-            GainPhase[1][i][j][k] = P2[i][auxI];
-          };
-        };
-      };
-
-      SignFreq = (Freqs[1]>Freqs[0]);
-
-
-
-fillGaps();
-
-
-// Set default channel mapping to 1->1:
-
+    // Set default channel mapping to 1->1:
     preKt = new double[Nants];
     pret0 = new long[Nants];
     pret1 = new long[Nants];
@@ -123,38 +105,33 @@ fillGaps();
     bufferGain[0] = new std::complex<float>*[Nants];
     bufferGain[1] = new std::complex<float>*[Nants];
 
-    for (auxI=0;auxI<Nants;auxI++) {
-       pret0[auxI] = 0;
-       pret1[auxI] = 0;
-       preKt[auxI] = -1.0;
-       bufferGain[0][auxI] = new std::complex<float>[Nchan];
-       bufferGain[1][auxI] = new std::complex<float>[Nchan];
-    };
+    for (long i=0; i<Nants; i++) {
+       pret0[i] = 0;
+       pret1[i] = 0;
+       preKt[i] = -1.0;
+       bufferGain[0][i] = new std::complex<float>[Nchan];
+       bufferGain[1][i] = new std::complex<float>[Nchan];
+    }
     K0 = new double[Nchan];
     I0 = new long[Nchan];
     I1 = new long[Nchan];
 
     MSChan = Nchan;
-    for (auxI = 0; auxI<Nchan; auxI++) {
-      K0[auxI] = 1.0;
-      I0[auxI] = auxI;
-      I1[auxI] = 0;
+    for (long i = 0; i<Nchan; i++) {
+      K0[i] = 1.0;
+      I0[i] = i;
+      I1[i] = 0;
 
-    };
+    }
 
-
-
-};
+}
 
 
-
-// Is this a bandpass gain or a time gain?
-bool CalTable::isBandpass() {
-
-  return Nchan>1;
-
-};
-
+/** Return true of bandpass gain table, false of time gain table */
+bool CalTable::isBandpass()
+{
+    return Nchan > 1;
+}
 
 
 // Interpolate failed frequency channels of each antenna and for each time:
