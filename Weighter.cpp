@@ -50,24 +50,24 @@ Weighter::Weighter(int nPhase, long *nASDMtimes, long nASDMentries, int *ASDMant
 
 
 /* Returns whether the antenna is in the phased sum (true) or not (false) */
-bool Weighter::getWeight(int iant, double JDtime){
+bool Weighter::getWeight(int iant, double JDtime)
+{
+    int antidx;
+    for (antidx=0; antidx<nants; antidx++) {
+        if (ants[antidx] == iant) { break; }
+    }
+    if (antidx >= nants) {
+        return false;
+    }
 
-  long i;
-  int j;
+    for (long i=0; i<ntimes[antidx]; i++) {
+        if (JDtimes[antidx][2*i]<=JDtime && JDtimes[antidx][2*i+1]>=JDtime) {
+            return true;
+        }
+    }
 
-  
-
-  for (j=0; j<nants; j++){
-    if (ants[j] == iant){break;};
-  };
-
-
-  for (i=0; i<ntimes[j]; i++){
-    if (JDtimes[j][2*i]<=JDtime && JDtimes[j][2*i+1]>=JDtime){return true;};   
-  };
-
-  return false;
-};
+    return false;
+}
 
 
 
